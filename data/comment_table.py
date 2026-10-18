@@ -1,9 +1,9 @@
 import datetime
 import sqlalchemy
-from .db_session import SqlAlchemyBase
+from .db_session import Base
 from sqlalchemy import orm
 
-class Comment(SqlAlchemyBase):
+class Comment(Base):
     __tablename__ = 'comments'
 
     id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
@@ -12,4 +12,4 @@ class Comment(SqlAlchemyBase):
     timestamp = sqlalchemy.Column(sqlalchemy.DateTime, default=datetime.datetime.now)  # Метка времени
 
     # Обратная связь
-    case = orm.relationship("Comment", back_populates="comments")
+    case = orm.relationship("Case", back_populates="comments")

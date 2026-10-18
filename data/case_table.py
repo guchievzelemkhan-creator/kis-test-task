@@ -1,9 +1,9 @@
 import datetime
 import sqlalchemy
-from .db_session import SqlAlchemyBase
+from .db_session import Base
 from sqlalchemy import orm
 
-class Case(SqlAlchemyBase):
+class Case(Base):
     __tablename__ = 'cases'
 
     id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
