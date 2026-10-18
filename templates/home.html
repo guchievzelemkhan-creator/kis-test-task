@@ -18,7 +18,32 @@
         .badge-guild { background-color: #6c757d; }
         .status-active { color: #198754; font-weight: 600; }
         .status-closed { color: #6c757d; text-decoration: line-through; }
-        .gantt-container { background: #ffffff; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        
+        /* Контейнер-слайдер для горизонтальной прокрутки диаграммы Ганта */
+        .gantt-wrapper {
+            width: 100%;
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: nowrap;
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .gantt-wrapper .mermaid {
+            min-width: 950px;
+            display: inline-block;
+        }
+        /* Указатель курсора для кликабельных полосок Ганта */
+        .mermaid .clickable {
+            cursor: pointer;
+        }
+        /* Скрываем текст внутри полосок Ганта */
+        .mermaid .taskText, 
+        .mermaid .taskTextOutsideRight, 
+        .mermaid .taskTextOutsideLeft {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -110,10 +135,8 @@
         {% if cases %}
             {% for case in cases %}
             <div class="col-md-6 col-lg-4 case-item" data-search="{{ case.guild }} {{ case.title }} {{ case.description }}">
-                <!-- Динамические рамки для просроченных/горящих дел -->
                 <div class="card h-100 card-case {% if case.is_overdue %}border-danger border-2 shadow-sm{% elif case.is_burning %}border-warning border-2 shadow-sm{% endif %}">
                     
-                    <!-- Шапка-индикатор срочности -->
                     {% if case.is_overdue %}
                     <div class="card-header bg-danger text-white py-1 small fw-bold text-center">
                         ⚠️ ВНИМАНИЕ: СРОК ПРОСРОЧЕН!
@@ -166,21 +189,23 @@
         {% endif %}
     </div>
 
-    <!-- РЕЖИМ 2: ОТОБРАЖЕНИЕ ДИАГРАММЫ ГАНТА -->
+    <!-- РЕЖИМ 2: ОТОБРАЖЕНИЕ ДИАГРАММЫ ГАНТА (ПОЛОСКИ БЕЗ ТЕКСТА, КЛИКАБЕЛЬНЫЕ) -->
     {% else %}
-    <div class="gantt-container shadow-sm mb-4">
-        <h5 class="card-title h6 mb-3 text-secondary">📊 Временная шкала обещаний (Диаграмма Ганта)</h5>
+    <div class="gantt-wrapper mb-4">
+        <h5 class="card-title h6 mb-3 text-secondary">📊 Временная шкала обещаний (Нажмите на полоску, чтобы открыть протокол)</h5>
         {% if cases %}
-        <div class="mermaid text-center">
+        <div class="mermaid">
             gantt
                 title Календарный план обещаний Патриция
                 dateFormat  YYYY-MM-DD
                 axisFormat  %d.%m
+                tickInterval 1d
 
                 {% for case in cases %}
                 {% if case.promised_at and case.deadline %}
-                section {{ case.guild }}
-                {{ case.title | replace(':', ' ') | replace('"', '') }} : {% if case.status == 'closed' %}done, {% endif %}case_{{ case.id }}, {{ case.promised_at.strftime('%Y-%m-%d') }}, {{ case.deadline.strftime('%Y-%m-%d') }}
+                section {{ (case.guild.name if case.guild.name is defined else case.guild) | truncate(25) }}
+                " " : {% if case.status == 'closed' %}done, {% endif %}case_{{ case.id }}, {{ case.promised_at.strftime('%Y-%m-%d') }}, {{ case.deadline.strftime('%Y-%m-%d') }}
+                click case_{{ case.id }} href "/case/{{ case.id }}"
                 {% endif %}
                 {% endfor %}
         </div>
@@ -241,7 +266,18 @@
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://npmcdn.com/flatpickr/dist/l10n/ru.js"></script>
 <script>
-    mermaid.initialize({ startOnLoad: true, theme: 'neutral', securityLevel: 'loose' });
+    mermaid.initialize({ 
+        startOnLoad: true, 
+        theme: 'neutral', 
+        securityLevel: 'loose',
+        gantt: {
+            useMaxWidth: false,
+            leftPadding: 220,
+            gridLineWidth: 1,
+            axisFormat: '%d.%m',
+            topAxis: true
+        }
+    });
 
     function filterCases() {
         const query = document.getElementById('searchInput').value.toLowerCase();
@@ -288,6 +324,7 @@
         });
     }
 
+    // Автосохранение черновиков в localStorage
     const draftInputs = ['guild', 'title', 'description', 'promised_at', 'deadline'];
     window.addEventListener('DOMContentLoaded', () => {
         draftInputs.forEach(id => {
