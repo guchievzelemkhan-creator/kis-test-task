@@ -18,7 +18,7 @@
         .badge-guild { background-color: #6c757d; }
         .status-active { color: #198754; font-weight: 600; }
         .status-closed { color: #6c757d; text-decoration: line-through; }
-        
+
         /* Контейнер-слайдер для горизонтальной прокрутки диаграммы Ганта */
         .gantt-wrapper {
             width: 100%;
@@ -39,10 +39,17 @@
             cursor: pointer;
         }
         /* Скрываем текст внутри полосок Ганта */
-        .mermaid .taskText, 
-        .mermaid .taskTextOutsideRight, 
+        .mermaid .taskText,
+        .mermaid .taskTextOutsideRight,
         .mermaid .taskTextOutsideLeft {
             display: none !important;
+        }
+
+        /* Dropdown с чекбоксами гильдий */
+        .guild-dropdown-menu {
+            min-width: 260px;
+            max-height: 380px;
+            overflow-y: auto;
         }
     </style>
 </head>
@@ -75,14 +82,58 @@
 
     <!-- Расширенная панель фильтров -->
     <div class="row g-3 mb-4 align-items-center">
-        <!-- Вкладки периодов -->
-        <div class="col-lg-5">
+        <!-- Вкладки периодов (с сохранением выбранных гильдий) -->
+        <div class="col-lg-4">
             <div class="btn-group w-100" role="group">
-                <a href="/?view=day&date={{ current_date }}&status_filter={{ status_filter }}&display_mode={{ display_mode }}" class="btn btn-outline-dark btn-sm {% if current_view == 'day' %}active{% endif %}">День</a>
-                <a href="/?view=week&date={{ current_date }}&status_filter={{ status_filter }}&display_mode={{ display_mode }}" class="btn btn-outline-dark btn-sm {% if current_view == 'week' %}active{% endif %}">Неделя</a>
-                <a href="/?view=month&date={{ current_date }}&status_filter={{ status_filter }}&display_mode={{ display_mode }}" class="btn btn-outline-dark btn-sm {% if current_view == 'month' %}active{% endif %}">Месяц</a>
-                <a href="/?view=range&start_date={{ start_date or current_date }}&end_date={{ end_date or current_date }}&status_filter={{ status_filter }}&display_mode={{ display_mode }}" class="btn btn-outline-dark btn-sm {% if current_view == 'range' %}active{% endif %}">Диапазон</a>
-                <a href="/?view=all&status_filter={{ status_filter }}&display_mode={{ display_mode }}" class="btn btn-outline-dark btn-sm {% if current_view == 'all' %}active{% endif %}">Все</a>
+                <a href="/?view=day&date={{ current_date }}&status_filter={{ status_filter }}&display_mode={{ display_mode }}{% for gid in guild_filter %}&guild_id={{ gid }}{% endfor %}"
+                   class="btn btn-outline-dark btn-sm {% if current_view == 'day' %}active{% endif %}">День</a>
+                <a href="/?view=week&date={{ current_date }}&status_filter={{ status_filter }}&display_mode={{ display_mode }}{% for gid in guild_filter %}&guild_id={{ gid }}{% endfor %}"
+                   class="btn btn-outline-dark btn-sm {% if current_view == 'week' %}active{% endif %}">Неделя</a>
+                <a href="/?view=month&date={{ current_date }}&status_filter={{ status_filter }}&display_mode={{ display_mode }}{% for gid in guild_filter %}&guild_id={{ gid }}{% endfor %}"
+                   class="btn btn-outline-dark btn-sm {% if current_view == 'month' %}active{% endif %}">Месяц</a>
+                <a href="/?view=range&start_date={{ start_date or current_date }}&end_date={{ end_date or current_date }}&status_filter={{ status_filter }}&display_mode={{ display_mode }}{% for gid in guild_filter %}&guild_id={{ gid }}{% endfor %}"
+                   class="btn btn-outline-dark btn-sm {% if current_view == 'range' %}active{% endif %}">Диапазон</a>
+                <a href="/?view=all&status_filter={{ status_filter }}&display_mode={{ display_mode }}{% for gid in guild_filter %}&guild_id={{ gid }}{% endfor %}"
+                   class="btn btn-outline-dark btn-sm {% if current_view == 'all' %}active{% endif %}">Все</a>
+            </div>
+        </div>
+
+        <!-- Фильтр гильдий (мультивыбор) -->
+        <div class="col-lg-2">
+            <div class="dropdown">
+                <button class="btn btn-outline-dark btn-sm w-100 dropdown-toggle d-flex justify-content-between align-items-center"
+                    type="button" id="guildFilterBtn"
+                    data-bs-toggle="dropdown" data-bs-auto-close="outside"
+                    aria-expanded="false">
+                    <span class="text-truncate">
+                        🏰 Гильдии: {% if guild_filter %}выбрано {{ guild_filter|length }}{% else %}все{% endif %}
+                    </span>
+                </button>
+                <ul class="dropdown-menu guild-dropdown-menu p-3" aria-labelledby="guildFilterBtn">
+                    <li class="mb-2 d-flex gap-2 align-items-center">
+                        <button type="button" class="btn btn-sm btn-link p-0" onclick="selectAllGuilds(true)">Выбрать все</button>
+                        <span class="text-muted">|</span>
+                        <button type="button" class="btn btn-sm btn-link p-0" onclick="selectAllGuilds(false)">Сбросить</button>
+                    </li>
+                    {% for g in guilds %}
+                    <li>
+                        <div class="form-check">
+                            <input class="form-check-input guild-checkbox" type="checkbox"
+                                   value="{{ g.id }}" id="guild_{{ g.id }}"
+                                   {% if g.id|string in guild_filter %}checked{% endif %}>
+                            <label class="form-check-label" for="guild_{{ g.id }}">
+                                {{ g.name or 'Без гильдии' }}
+                            </label>
+                        </div>
+                    </li>
+                    {% endfor %}
+                    {% if not guilds %}
+                    <li class="text-muted small">Пока нет ни одной гильдии</li>
+                    {% endif %}
+                    <li class="mt-2">
+                        <button type="button" class="btn btn-sm btn-primary w-100" onclick="applyGuildFilter()">Применить</button>
+                    </li>
+                </ul>
             </div>
         </div>
 
@@ -96,10 +147,11 @@
                 <option value="overdue" {% if status_filter == 'overdue' %}selected{% endif %}>⚠️ Просроченные</option>
             </select>
         </div>
-        
+
         <!-- Поиск -->
-        <div class="col-lg-4">
-            <input type="text" id="searchInput" class="form-control form-control-sm" placeholder="🔍 Найти дело или Гильдию..." onkeyup="filterCases()">
+        <div class="col-lg-3">
+            <input type="text" id="searchInput" class="form-control form-control-sm"
+                   placeholder="🔍 Найти дело или Гильдию..." onkeyup="filterCases()">
         </div>
     </div>
 
@@ -111,12 +163,18 @@
                 <input type="hidden" name="view" value="range">
                 <input type="hidden" name="status_filter" value="{{ status_filter }}">
                 <input type="hidden" name="display_mode" value="{{ display_mode }}">
+
+                <!-- Сохраняем выбранные гильдии при отправке формы -->
+                {% for gid in guild_filter %}
+                <input type="hidden" name="guild_id" value="{{ gid }}">
+                {% endfor %}
+
                 <div class="col-auto">
                     <span class="fw-bold text-secondary">📅 Период поиска:</span>
                 </div>
                 <div class="col-auto flex-grow-1" style="max-width: 300px;">
-                    <input type="text" id="dateRangePicker" name="date_range" class="form-control form-control-sm" 
-                           placeholder="Нажмите, чтобы выбрать даты..." 
+                    <input type="text" id="dateRangePicker" name="date_range" class="form-control form-control-sm"
+                           placeholder="Нажмите, чтобы выбрать даты..."
                            value="{% if start_date and end_date %}{{ start_date }} до {{ end_date }}{% endif %}">
                     <input type="hidden" id="startDate" name="start_date" value="{{ start_date }}">
                     <input type="hidden" id="endDate" name="end_date" value="{{ end_date }}">
@@ -134,9 +192,10 @@
     <div class="row g-3" id="casesList">
         {% if cases %}
             {% for case in cases %}
-            <div class="col-md-6 col-lg-4 case-item" data-search="{{ case.guild }} {{ case.title }} {{ case.description }}">
+            <div class="col-md-6 col-lg-4 case-item"
+                 data-search="{{ (case.guild.name if case.guild else '') }} {{ case.title or '' }} {{ case.description or '' }}">
                 <div class="card h-100 card-case {% if case.is_overdue %}border-danger border-2 shadow-sm{% elif case.is_burning %}border-warning border-2 shadow-sm{% endif %}">
-                    
+
                     {% if case.is_overdue %}
                     <div class="card-header bg-danger text-white py-1 small fw-bold text-center">
                         ⚠️ ВНИМАНИЕ: СРОК ПРОСРОЧЕН!
@@ -149,23 +208,25 @@
 
                     <div class="card-body d-flex flex-column">
                         <div class="d-flex justify-content-between align-items-start mb-2">
-                            <span class="badge badge-guild text-white">{{ case.guild }}</span>
+                            <span class="badge badge-guild text-white">
+                                {{ case.guild.name if case.guild and case.guild.name else 'Без гильдии' }}
+                            </span>
                             <span class="small {% if case.status == 'closed' %}status-closed{% else %}status-active{% endif %}">
                                 {{ 'Закрыто' if case.status == 'closed' else 'Активно' }}
                             </span>
                         </div>
-                        
+
                         <h5 class="card-title h6 mb-2">
                             {% if case.is_overdue %}⚠️ {% elif case.is_burning %}🔥 {% endif %}
                             {{ case.title }}
                         </h5>
-                        
+
                         <p class="card-text text-muted small flex-grow-1">
                             {{ case.description | truncate(90) if case.description else 'Без дополнительных подробностей.' }}
                         </p>
-                        
+
                         <hr class="my-2">
-                        
+
                         <div class="small text-muted mb-3">
                             <div>📅 <strong>Обещано:</strong> {{ case.promised_at.strftime('%d.%m.%Y') if case.promised_at else '-' }}</div>
                             <div class="{% if case.is_overdue %}text-danger fw-bold{% elif case.is_burning %}text-warning-emphasis fw-bold{% endif %}">
@@ -189,7 +250,7 @@
         {% endif %}
     </div>
 
-    <!-- РЕЖИМ 2: ОТОБРАЖЕНИЕ ДИАГРАММЫ ГАНТА (ПОЛОСКИ БЕЗ ТЕКСТА, КЛИКАБЕЛЬНЫЕ) -->
+    <!-- РЕЖИМ 2: ОТОБРАЖЕНИЕ ДИАГРАММЫ ГАНТА -->
     {% else %}
     <div class="gantt-wrapper mb-4">
         <h5 class="card-title h6 mb-3 text-secondary">📊 Временная шкала обещаний (Нажмите на полоску, чтобы открыть протокол)</h5>
@@ -203,7 +264,7 @@
 
                 {% for case in cases %}
                 {% if case.promised_at and case.deadline %}
-                section {{ (case.guild.name if case.guild.name is defined else case.guild) | truncate(25) }}
+                section {{ (case.guild.name if case.guild and case.guild.name else 'Без гильдии') | truncate(25) }}
                 " " : {% if case.status == 'closed' %}done, {% endif %}case_{{ case.id }}, {{ case.promised_at.strftime('%Y-%m-%d') }}, {{ case.deadline.strftime('%Y-%m-%d') }}
                 click case_{{ case.id }} href "/case/{{ case.id }}"
                 {% endif %}
@@ -266,9 +327,9 @@
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://npmcdn.com/flatpickr/dist/l10n/ru.js"></script>
 <script>
-    mermaid.initialize({ 
-        startOnLoad: true, 
-        theme: 'neutral', 
+    mermaid.initialize({
+        startOnLoad: true,
+        theme: 'neutral',
         securityLevel: 'loose',
         gantt: {
             useMaxWidth: false,
@@ -298,6 +359,21 @@
         const urlParams = new URLSearchParams(window.location.search);
         urlParams.set('display_mode', mode);
         window.location.search = urlParams.toString();
+    }
+
+    // НОВОЕ: применить мультивыбор гильдий
+    function applyGuildFilter() {
+        const checked = Array.from(document.querySelectorAll('.guild-checkbox:checked'))
+                             .map(cb => cb.value);
+        const urlParams = new URLSearchParams(window.location.search);
+        urlParams.delete('guild_id');
+        checked.forEach(id => urlParams.append('guild_id', id));
+        window.location.search = urlParams.toString();
+    }
+
+    // НОВОЕ: «выбрать все» / «сбросить»
+    function selectAllGuilds(state) {
+        document.querySelectorAll('.guild-checkbox').forEach(cb => cb.checked = state);
     }
 
     const rangePicker = document.getElementById('dateRangePicker');
