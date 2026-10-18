@@ -1,11 +1,13 @@
 import datetime
-from flask import Flask, render_template, request, redirect, url_for, make_response
+from flask import Flask, render_template, request, redirect, url_for
 from data import db_session
 from data.case_table import Case
 from data.comment_table import Comment
+from data.guild_table import Guild
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret_patrician_diary_key'
+
 
 @app.route('/')
 def home():
@@ -16,8 +18,7 @@ def home():
     start_str = request.args.get('start_date', '')
     end_str = request.args.get('end_date', '')
     status_filter = request.args.get('status_filter', 'all')
-    
-    # Вид отображения: 'cards' (карточки) или 'gantt' (диаграмма Ганта)
+    guild_filter = request.args.get('guild_id', 'all')
     display_mode = request.args.get('display_mode', 'cards')
 
     try:
@@ -26,12 +27,21 @@ def home():
         target_date = datetime.date.today()
 
     cases = []
+    guilds = []
     error_message = None
     
     try:
+        guilds = sess.query(Guild).order_by(Guild.name.asc()).all()
         query = sess.query(Case)
+
+        # 1. Фильтрация по Гильдии
+        if guild_filter != 'all':
+            try:
+                query = query.filter(Case.guild_id == int(guild_filter))
+            except ValueError:
+                pass
         
-        # 1. Фильтрация по периодам
+        # 2. Фильтрация по периодам
         if view == 'day':
             start_dt = datetime.datetime.combine(target_date, datetime.time.min)
             end_dt = datetime.datetime.combine(target_date, datetime.time.max)
@@ -61,9 +71,8 @@ def home():
             end_dt = datetime.datetime.combine(end_dt_val, datetime.time.max)
             query = query.filter(Case.deadline >= start_dt, Case.deadline <= end_dt)
 
-        # 2. Фильтрация по статусам и дедлайнам
+        # 3. Фильтрация по статусам и дедлайнам
         now = datetime.datetime.now()
-        
         if status_filter == 'active':
             query = query.filter(Case.status == 'active')
         elif status_filter == 'closed':
@@ -76,8 +85,14 @@ def home():
             
         cases = query.order_by(Case.deadline.asc()).all()
         
+        # Принудительно обращаемся к гильдии для каждого дела прямо здесь,
+        # пока сессия еще открыта. Это исключает DetachedInstanceError.
+        for case in cases:
+            if case.guild:
+                _ = case.guild.name
+
     except Exception as e:
-        error_message = "Внимание: некоторые записи в архиве повреждены и были пропущены."
+        error_message = f"Внимание: произошла ошибка при получении данных ({e})."
         cases = []
     finally:
         sess.close()
@@ -85,11 +100,13 @@ def home():
     return render_template(
         'home.html', 
         cases=cases, 
+        guilds=guilds,
         current_view=view, 
         current_date=target_date.isoformat(),
         start_date=start_str,
         end_date=end_str,
         status_filter=status_filter,
+        guild_filter=guild_filter,
         display_mode=display_mode,
         error_message=error_message
     )
@@ -99,17 +116,31 @@ def home():
 def create_case():
     sess = db_session.create_session()
     try:
-        guild = request.form.get('guild')
-        title = request.form.get('title')
+        # ИСПРАВЛЕНО: форма отправляет name="guild", а не "guild_name"
+        guild_name = (request.form.get('guild') or '').strip()
+        title = (request.form.get('title') or '').strip()
         description = request.form.get('description')
         promised_str = request.form.get('promised_at')
         deadline_str = request.form.get('deadline')
+
+        # Защита от пустых значений, чтобы не плодить Guild(name='') / Case(title='')
+        if not guild_name:
+            guild_name = 'Без гильдии'
+        if not title:
+            title = 'Без названия'
+
+        # Ищем существующую гильдию или создаём новую
+        guild = sess.query(Guild).filter(Guild.name.ilike(guild_name)).first()
+        if not guild:
+            guild = Guild(name=guild_name)
+            sess.add(guild)
+            sess.flush()
 
         promised_at = datetime.date.fromisoformat(promised_str) if promised_str else datetime.date.today()
         deadline = datetime.date.fromisoformat(deadline_str) if deadline_str else None
 
         new_case = Case(
-            guild=guild,
+            guild_id=guild.id,
             title=title,
             description=description,
             promised_at=datetime.datetime.combine(promised_at, datetime.time.min),
@@ -135,6 +166,10 @@ def view_case(case_id):
         case = sess.query(Case).filter(Case.id == case_id).first()
         if not case:
             return redirect(url_for('home'))
+        
+        # «Трогаем» гильдию до закрытия сессии
+        if case.guild:
+            _ = case.guild.name
         
         comments = sess.query(Comment).filter(Comment.case_id == case_id).order_by(Comment.timestamp.asc()).all()
         return render_template('case.html', case=case, comments=comments)

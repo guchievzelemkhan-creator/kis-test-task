@@ -7,9 +7,8 @@ class Comment(Base):
     __tablename__ = 'comments'
 
     id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
-    case_id = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey('cases.id'))
+    case_id = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey('cases.id'), nullable=False)
     text = sqlalchemy.Column(sqlalchemy.Text, nullable=False)
-    timestamp = sqlalchemy.Column(sqlalchemy.DateTime, default=datetime.datetime.now)  # Метка времени
+    timestamp = sqlalchemy.Column(sqlalchemy.DateTime, default=datetime.datetime.now)
 
-    # Обратная связь
     case = orm.relationship("Case", back_populates="comments")
