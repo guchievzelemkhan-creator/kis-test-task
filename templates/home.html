@@ -6,9 +6,11 @@
     <title>Дневник обещаний — Секретарь Стукпостук</title>
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Flatpickr CSS для календаря -->
+    <!-- Flatpickr CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/material_blue.css">
+    <!-- Mermaid.js для диаграммы Ганта -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
     <style>
         body { background-color: #f8f9fa; color: #212529; }
         .card-case { transition: transform 0.15s ease-in-out, box-shadow 0.15s ease-in-out; }
@@ -16,6 +18,7 @@
         .badge-guild { background-color: #6c757d; }
         .status-active { color: #198754; font-weight: 600; }
         .status-closed { color: #6c757d; text-decoration: line-through; }
+        .gantt-container { background: #ffffff; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
     </style>
 </head>
 <body>
@@ -27,12 +30,17 @@
             <h1 class="h3 mb-0">📜 Дневник обещаний Патриция</h1>
             <small class="text-muted">Секретарь Стукпостук помнит всё: кто приходил, о чём просил и что ему ответили.</small>
         </div>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createCaseModal">
-            + Записать обещание
-        </button>
+        <div class="d-flex gap-2">
+            <!-- Переключатель режима отображения: Карточки / Диаграмма Ганта -->
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-outline-primary {% if display_mode == 'cards' %}active{% endif %}" onclick="switchDisplayMode('cards')">🎴 Карточки</button>
+                <button type="button" class="btn btn-outline-primary {% if display_mode == 'gantt' %}active{% endif %}" onclick="switchDisplayMode('gantt')">📊 Диаграмма Ганта</button>
+            </div>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createCaseModal">+ Записать обещание</button>
+        </div>
     </header>
 
-    <!-- Предупреждение о повреждённых записях (Требование ТЗ) -->
+    <!-- Предупреждение о повреждённых записях -->
     {% if error_message %}
     <div class="alert alert-warning alert-dismissible fade show" role="alert">
         ⚠️ <strong>Архив Стукпостука:</strong> {{ error_message }}
@@ -40,50 +48,64 @@
     </div>
     {% endif %}
 
-    <!-- Панель фильтров (вкладки периодов) и поиск -->
+    <!-- Расширенная панель фильтров -->
     <div class="row g-3 mb-4 align-items-center">
-        <!-- Вкладки видов: День / Неделя / Месяц / Диапазон / Все -->
-        <div class="col-lg-7">
+        <!-- Вкладки периодов -->
+        <div class="col-lg-5">
             <div class="btn-group w-100" role="group">
-                <a href="/?view=day&date={{ current_date }}" class="btn btn-outline-dark {% if current_view == 'day' %}active{% endif %}">День</a>
-                <a href="/?view=week&date={{ current_date }}" class="btn btn-outline-dark {% if current_view == 'week' %}active{% endif %}">Неделя</a>
-                <a href="/?view=month&date={{ current_date }}" class="btn btn-outline-dark {% if current_view == 'month' %}active{% endif %}">Месяц</a>
-                <a href="/?view=range&start_date={{ start_date or current_date }}&end_date={{ end_date or current_date }}" class="btn btn-outline-dark {% if current_view == 'range' %}active{% endif %}">Диапазон</a>
-                <a href="/?view=all" class="btn btn-outline-dark {% if current_view == 'all' %}active{% endif %}">Все дела</a>
+                <a href="/?view=day&date={{ current_date }}&status_filter={{ status_filter }}&display_mode={{ display_mode }}" class="btn btn-outline-dark btn-sm {% if current_view == 'day' %}active{% endif %}">День</a>
+                <a href="/?view=week&date={{ current_date }}&status_filter={{ status_filter }}&display_mode={{ display_mode }}" class="btn btn-outline-dark btn-sm {% if current_view == 'week' %}active{% endif %}">Неделя</a>
+                <a href="/?view=month&date={{ current_date }}&status_filter={{ status_filter }}&display_mode={{ display_mode }}" class="btn btn-outline-dark btn-sm {% if current_view == 'month' %}active{% endif %}">Месяц</a>
+                <a href="/?view=range&start_date={{ start_date or current_date }}&end_date={{ end_date or current_date }}&status_filter={{ status_filter }}&display_mode={{ display_mode }}" class="btn btn-outline-dark btn-sm {% if current_view == 'range' %}active{% endif %}">Диапазон</a>
+                <a href="/?view=all&status_filter={{ status_filter }}&display_mode={{ display_mode }}" class="btn btn-outline-dark btn-sm {% if current_view == 'all' %}active{% endif %}">Все</a>
             </div>
         </div>
+
+        <!-- Выпадающий фильтр статусов -->
+        <div class="col-lg-3">
+            <select class="form-select form-select-sm" id="statusFilterSelect" onchange="applyStatusFilter(this.value)">
+                <option value="all" {% if status_filter == 'all' %}selected{% endif %}>📋 Все статусы</option>
+                <option value="active" {% if status_filter == 'active' %}selected{% endif %}>🟢 Только открытые</option>
+                <option value="closed" {% if status_filter == 'closed' %}selected{% endif %}>🔘 Только закрытые</option>
+                <option value="burning" {% if status_filter == 'burning' %}selected{% endif %}>🔥 Дедлайн горит</option>
+                <option value="overdue" {% if status_filter == 'overdue' %}selected{% endif %}>⚠️ Просроченные</option>
+            </select>
+        </div>
         
-        <!-- Мгновенный поиск по делам -->
-        <div class="col-lg-5">
-            <input type="text" id="searchInput" class="form-control" placeholder="🔍 Найти дело или Гильдию..." onkeyup="filterCases()">
+        <!-- Поиск -->
+        <div class="col-lg-4">
+            <input type="text" id="searchInput" class="form-control form-control-sm" placeholder="🔍 Найти дело или Гильдию..." onkeyup="filterCases()">
         </div>
     </div>
 
-    <!-- Выдвижная панель выбора диапазона дат, если активна вкладка "Диапазон" -->
+    <!-- Выдвижная панель выбора диапазона дат -->
     {% if current_view == 'range' %}
     <div class="card shadow-sm mb-4 bg-light border-0">
         <div class="card-body py-3">
             <form action="/" method="GET" class="row g-3 align-items-center">
                 <input type="hidden" name="view" value="range">
+                <input type="hidden" name="status_filter" value="{{ status_filter }}">
+                <input type="hidden" name="display_mode" value="{{ display_mode }}">
                 <div class="col-auto">
                     <span class="fw-bold text-secondary">📅 Период поиска:</span>
                 </div>
                 <div class="col-auto flex-grow-1" style="max-width: 300px;">
-                    <input type="text" id="dateRangePicker" name="date_range" class="form-control" 
+                    <input type="text" id="dateRangePicker" name="date_range" class="form-control form-control-sm" 
                            placeholder="Нажмите, чтобы выбрать даты..." 
                            value="{% if start_date and end_date %}{{ start_date }} до {{ end_date }}{% endif %}">
                     <input type="hidden" id="startDate" name="start_date" value="{{ start_date }}">
                     <input type="hidden" id="endDate" name="end_date" value="{{ end_date }}">
                 </div>
                 <div class="col-auto">
-                    <button type="submit" class="btn btn-primary">Применить фильтр</button>
+                    <button type="submit" class="btn btn-sm btn-primary">Применить</button>
                 </div>
             </form>
         </div>
     </div>
     {% endif %}
 
-    <!-- Список дел -->
+    <!-- РЕЖИМ 1: ОТОБРАЖЕНИЕ КАРТОЧЕК -->
+    {% if display_mode == 'cards' %}
     <div class="row g-3" id="casesList">
         {% if cases %}
             {% for case in cases %}
@@ -115,14 +137,41 @@
             {% endfor %}
         {% else %}
             <div class="col-12 text-center py-5 text-muted">
-                <h5>В выбранном периоде нет записей</h5>
-                <p>Патриций пока никому ничего не обещал в это время.</p>
+                <h5>В выбранном фильтре нет записей</h5>
+                <p>Патриций свободен от обязательств по заданным критериям.</p>
             </div>
         {% endif %}
     </div>
+
+    <!-- РЕЖИМ 2: ОТОБРАЖЕНИЕ ДИАГРАММЫ ГАНТА -->
+    {% else %}
+    <div class="gantt-container shadow-sm mb-4">
+        <h5 class="card-title h6 mb-3 text-secondary">📊 Временная шкала обещаний (Диаграмма Ганта)</h5>
+        {% if cases %}
+        <div class="mermaid text-center">
+            gantt
+                title Календарный план обещаний Патриция
+                dateFormat  YYYY-MM-DD
+                axisFormat  %d.%m
+
+                {% for case in cases %}
+                {% if case.promised_at and case.deadline %}
+                section {{ case.guild }}
+                {{ case.title | replace(':', ' ') }} : {% if case.status == 'closed' %}done, {% endif %}case_{{ case.id }}, {{ case.promised_at.strftime('%Y-%m-%d') }}, {{ case.deadline.strftime('%Y-%m-%d') }}
+                {% endif %}
+                {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-4 text-muted">
+            <p>Нет дел для отображения на временной шкале.</p>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
 </div>
 
-<!-- Модальное окно создания нового дела -->
+<!-- Модальное окно создания дела -->
 <div class="modal fade" id="createCaseModal" tabindex="-1" aria-labelledby="createCaseModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -164,12 +213,14 @@
     </div>
 </div>
 
-<!-- Скрипты: Bootstrap, Flatpickr и логика интерфейса -->
+<!-- Скрипты -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://npmcdn.com/flatpickr/dist/l10n/ru.js"></script>
 <script>
-    // 1. Мгновенный поиск по делам на клиентской стороне
+    // Инициализация Mermaid.js для Ганта
+    mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+
     function filterCases() {
         const query = document.getElementById('searchInput').value.toLowerCase();
         const items = document.querySelectorAll('.case-item');
@@ -179,7 +230,18 @@
         });
     }
 
-    // 2. Инициализация календаря выбора диапазона дат (если активна вкладка диапазона)
+    function applyStatusFilter(statusVal) {
+        const urlParams = new URLSearchParams(window.location.search);
+        urlParams.set('status_filter', statusVal);
+        window.location.search = urlParams.toString();
+    }
+
+    function switchDisplayMode(mode) {
+        const urlParams = new URLSearchParams(window.location.search);
+        urlParams.set('display_mode', mode);
+        window.location.search = urlParams.toString();
+    }
+
     const rangePicker = document.getElementById('dateRangePicker');
     if (rangePicker) {
         flatpickr(rangePicker, {
@@ -204,9 +266,8 @@
         });
     }
 
-    // 3. Требование ТЗ: «Ввод не теряется» (Автосохранение черновика модального окна в localStorage)
+    // Автосохранение черновиков в localStorage
     const draftInputs = ['guild', 'title', 'description', 'promised_at', 'deadline'];
-    
     window.addEventListener('DOMContentLoaded', () => {
         draftInputs.forEach(id => {
             const savedValue = localStorage.getItem('draft_' + id);
@@ -214,7 +275,6 @@
                 document.getElementById(id).value = savedValue;
             }
         });
-        
         const promisedInput = document.getElementById('promised_at');
         if (promisedInput && !promisedInput.value) {
             promisedInput.value = new Date().toISOString().split('T')[0];
