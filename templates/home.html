@@ -110,7 +110,20 @@
         {% if cases %}
             {% for case in cases %}
             <div class="col-md-6 col-lg-4 case-item" data-search="{{ case.guild }} {{ case.title }} {{ case.description }}">
-                <div class="card h-100 card-case">
+                <!-- Динамические рамки для просроченных/горящих дел -->
+                <div class="card h-100 card-case {% if case.is_overdue %}border-danger border-2 shadow-sm{% elif case.is_burning %}border-warning border-2 shadow-sm{% endif %}">
+                    
+                    <!-- Шапка-индикатор срочности -->
+                    {% if case.is_overdue %}
+                    <div class="card-header bg-danger text-white py-1 small fw-bold text-center">
+                        ⚠️ ВНИМАНИЕ: СРОК ПРОСРОЧЕН!
+                    </div>
+                    {% elif case.is_burning %}
+                    <div class="card-header bg-warning text-dark py-1 small fw-bold text-center">
+                        🔥 ДЕДЛАЙН ГОРИТ!
+                    </div>
+                    {% endif %}
+
                     <div class="card-body d-flex flex-column">
                         <div class="d-flex justify-content-between align-items-start mb-2">
                             <span class="badge badge-guild text-white">{{ case.guild }}</span>
@@ -118,7 +131,12 @@
                                 {{ 'Закрыто' if case.status == 'closed' else 'Активно' }}
                             </span>
                         </div>
-                        <h5 class="card-title h6 mb-2">{{ case.title }}</h5>
+                        
+                        <h5 class="card-title h6 mb-2">
+                            {% if case.is_overdue %}⚠️ {% elif case.is_burning %}🔥 {% endif %}
+                            {{ case.title }}
+                        </h5>
+                        
                         <p class="card-text text-muted small flex-grow-1">
                             {{ case.description | truncate(90) if case.description else 'Без дополнительных подробностей.' }}
                         </p>
@@ -127,10 +145,15 @@
                         
                         <div class="small text-muted mb-3">
                             <div>📅 <strong>Обещано:</strong> {{ case.promised_at.strftime('%d.%m.%Y') if case.promised_at else '-' }}</div>
-                            <div>⏳ <strong>Дедлайн:</strong> {{ case.deadline.strftime('%d.%m.%Y') if case.deadline else '-' }}</div>
+                            <div class="{% if case.is_overdue %}text-danger fw-bold{% elif case.is_burning %}text-warning-emphasis fw-bold{% endif %}">
+                                ⏳ <strong>Дедлайн:</strong> {{ case.deadline.strftime('%d.%m.%Y') if case.deadline else '-' }}
+                                {% if case.is_overdue %} ⚠️{% elif case.is_burning %} 🔥{% endif %}
+                            </div>
                         </div>
 
-                        <a href="/case/{{ case.id }}" class="btn btn-sm btn-outline-primary mt-auto w-100">Открыть протокол</a>
+                        <a href="/case/{{ case.id }}" class="btn btn-sm {% if case.is_overdue %}btn-outline-danger{% elif case.is_burning %}btn-outline-warning text-dark{% else %}btn-outline-primary{% endif %} mt-auto w-100">
+                            Открыть протокол
+                        </a>
                     </div>
                 </div>
             </div>
@@ -157,7 +180,7 @@
                 {% for case in cases %}
                 {% if case.promised_at and case.deadline %}
                 section {{ case.guild }}
-                {{ case.title | replace(':', ' ') }} : {% if case.status == 'closed' %}done, {% endif %}case_{{ case.id }}, {{ case.promised_at.strftime('%Y-%m-%d') }}, {{ case.deadline.strftime('%Y-%m-%d') }}
+                {{ case.title | replace(':', ' ') | replace('"', '') }} : {% if case.status == 'closed' %}done, {% endif %}case_{{ case.id }}, {{ case.promised_at.strftime('%Y-%m-%d') }}, {{ case.deadline.strftime('%Y-%m-%d') }}
                 {% endif %}
                 {% endfor %}
         </div>
@@ -171,7 +194,7 @@
 
 </div>
 
-<!-- Модальное окно создания дела -->
+<!-- Модальное окно создания нового дела -->
 <div class="modal fade" id="createCaseModal" tabindex="-1" aria-labelledby="createCaseModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -218,8 +241,7 @@
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://npmcdn.com/flatpickr/dist/l10n/ru.js"></script>
 <script>
-    // Инициализация Mermaid.js для Ганта
-    mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+    mermaid.initialize({ startOnLoad: true, theme: 'neutral', securityLevel: 'loose' });
 
     function filterCases() {
         const query = document.getElementById('searchInput').value.toLowerCase();
@@ -266,7 +288,6 @@
         });
     }
 
-    // Автосохранение черновиков в localStorage
     const draftInputs = ['guild', 'title', 'description', 'promised_at', 'deadline'];
     window.addEventListener('DOMContentLoaded', () => {
         draftInputs.forEach(id => {
